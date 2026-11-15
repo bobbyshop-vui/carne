@@ -219,14 +219,20 @@ init proc(module: Module) =
       for k in means.keys:
         order.add(k)
       sort(order, proc(a, b: string): int =
-        cmp(means[a].getFloat(), means[b].getFloat()))
+        let c = cmp(means[a].getFloat(), means[b].getFloat())
+        # Equal means (coarse timers, trivial bodies) rank by name so
+        # output is deterministic, never table order.
+        if c != 0: c else: cmp(a, b))
       let slowest = means[order[^1]].getFloat()
       var rank = newJArray()
       var speedup = newJObject()
       for k in order:
         rank.add(%k)
         speedup[k] =
-          if slowest > 0.0: %(slowest / means[k].getFloat())
+          # Clamp sub-picosecond means (exact-zero samples on coarse
+          # timers): otherwise slowest/0 is +Inf, which JSON drops to
+          # null and `> 1` comparisons go false.
+          if slowest > 0.0: %(slowest / max(means[k].getFloat(), 1e-9))
           else: %1.0
       var resp = newJObject()
       resp["results"] = results
