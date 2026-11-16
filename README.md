@@ -213,7 +213,7 @@ processing, crypto, networking, and developer tools:
 - `std/str` - string utilities and validators (fetched via `carne std init`)
 - `std/mimetype` - MIME type lookup
 - `std/benchmark` - in-process microbenchmarking
-- `std/qr` - QR code generation (decoding out of scope in v1)
+- `std/qr` - QR code generation (model2/model1/micro/rmqr/aqr/sqrc), matrix decoding, payload builders
 - `std/svg` - SVG parsing and serialization
 - `std/http` - async HTTP client + server (optional worker threads)
 - `std/ws` - async + sync WebSocket client and server
