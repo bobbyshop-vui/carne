@@ -44,6 +44,7 @@ script that just runs, take Carne.
 - Built-in database driver and ORM for sqlite and postgres, async + sync (`std/db`)
 - Multi-worker HTTP serving off one port, with zero-copy file responses (sendfile, ETag/Range)
 - Built-in test runner: `carne test` discovers and runs `tests/**/*.test.js` (`std/test`)
+- Native addons: Nim shared libraries (`.addon`) with a `newAddon` author macro, `carne build` and `carne gen addon` (`examples/addon/`)
 - Terminal toolkit: styling, prompts, password reads, CLI arg parsing (`std/terminal`)
 - Built-in package manager (`carne pkg`)
   - one shared global store in your home dir, no `node_modules`,
@@ -61,13 +62,14 @@ script that just runs, take Carne.
 ```
 A JavaScript runtime in Nim
   (c) OpenPeeps | MIT License
-  Build Version: 0.1.3
+  Build Version: 0.1.5
 
 usage: carne <command> [args] [options]
 
 Scripting:
   run <script.js> [args]    run a .js file
   test [file] [...]         run tests/**/*.test.js (or the given file)
+  build <input.nim> <output>  compile a native addon (.addon)
 
 Standard library:
   std init                  download JS stdlib (std/*) into ~/.carne/std
@@ -93,6 +95,16 @@ Packages:
     --url:<url>             pin a source URL
     --dry-run               no network, git, or secret changes
     --yes                   skip confirmation prompts
+
+Generating:
+  gen docs                  generate API reference into carnedocs/ (JSON and/or HTML)
+    --format:<json|html|all>  docs output selection (default: all)
+    --out:<dir>             docs output directory (default: carnedocs)
+    --entry:<file>          document one file instead of the whole package
+  gen ast <file>            dump the JavaScript AST of <file> (JSON or binary .ast)
+    --format:<json|bin>     ast output selection (default: json)
+    --out:<dir>             ast output directory (default: alongside the input)
+  gen addon <dir>           scaffold a native addon project in <dir>
 
 Versioning:
   bump [semver]             bump version in package.json (or a direct dep)
@@ -179,6 +191,42 @@ inside a package.
 
 Only CommonJS v1: ESM (`import`/`export`) packages fail with a clear
 error, as do packages with no loadable entry.
+
+### Native addons
+Nim shared libraries (`.addon`) callable from JS, Node-addon style:
+a package wraps a prebuilt binary with a JS entry that requires it
+relatively. Authors write `newAddon` from `carne/api/addon` (same
+`registerFn` types and arity checks as std modules), compile with
+`carne build`, and ship the binary beside the wrapper:
+
+```nim
+import carne/api/addon
+
+newAddon("hello", "0.1.0"):
+  exportObject:
+    registerFn hello(name: default(string, "world")):
+      ## hello([name]) -> greeting string
+      return toJS(ctx, "Hello, " & name & "!")
+```
+
+```js
+// index.js — the wrapper: scalar type checking lives at the native
+// boundary (wrong types throw TypeError), so it only adapts shapes
+// and composes behavior.
+const native = require("./native/hello.addon");
+module.exports = { hello: native.hello };
+```
+
+```sh
+carne gen addon hello   # scaffold a wrapper package
+carne build native/hello.nim native/hello.addon
+```
+
+Building requires carne as a Nim package, via nimble or clue.
+`require("./x.addon")` works from any JS file (package or script);
+one library loads per process with fresh exports per context, and
+the loader major-matches the addon against the host carne. See
+`examples/addon/` for the full wrapper pattern.
 
 ## Standard Library
 
