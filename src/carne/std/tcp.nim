@@ -428,8 +428,12 @@ registerFn(ctx, tcpWrite(text: string)):
   toJS(ctx, true)
 
 registerFn(ctx, tcpClose()):
-  ## conn.close(): final, idempotent; the pending slot is released when
-  ## the close lands (or at teardown).
+  ## conn.close(): final, idempotent; the pending slot is released now.
+  ## powpow's close() is silent unless it runs inside a data dispatch
+  ## (afterData fires onClose); a close from a timer or plain script code
+  ## would otherwise never run tcpOnClose, leaking the slot and hanging
+  ## the run. So release here; the late powpow close event no-ops on the
+  ## missing entry (as do server-side closes, which pre-drop entries).
   if thisObject == nil or not JSValueIsObject(ctx, thisObject):
     throwError(ctx, "close: called on an invalid connection", exception)
     return nil
@@ -438,11 +442,23 @@ registerFn(ctx, tcpClose()):
     return toJS(ctx, true)
   var e = tcpConns[key]
   e.closing = true
+  let res = e.resolveFn
+  let rej = e.rejectFn
+  e.resolveFn = nil
+  e.rejectFn = nil
   tcpConns[key] = e
+  let c = e.ctx
+  let conn = e.conn
+  cleanupConn(key)
+  if res != nil or rej != nil:
+    settleReject(c, res, rej, "connect: connection closed before open")
   try:
-    e.conn.close()
+    conn.close()
   except CatchableError:
     discard
+  # A locally-closed connection never fires the JS onClose (matches the
+  # wasClosing path in tcpOnClose); the peer's FIN still drives the
+  # remote side's onClose/EOF normally.
   toJS(ctx, true)
 
 proc makeConnHandle(ctx: JSContextRef; address: string; port: int;
