@@ -307,9 +307,12 @@ proc printHelp*() =
   echo ""
   echo label("Generating:")
   cmdHelp("gen docs", "generate API reference into carnedocs/ (JSON and/or HTML)")
-  flagHelp("--format:<json|html|all>", "output selection (default: all)")
-  flagHelp("--out:<dir>", "output directory (default: carnedocs)")
+  flagHelp("--format:<json|html|all>", "docs output selection (default: all)")
+  flagHelp("--out:<dir>", "docs output directory (default: carnedocs)")
   flagHelp("--entry:<file>", "document one file instead of the whole package")
+  cmdHelp("gen ast <file>", "dump the JavaScript AST of <file> (JSON and/or binary .ast)")
+  flagHelp("--format:<json|ast|all>", "ast output selection (default: all)")
+  flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
   echo ""
   echo label("Versioning:")
   cmdHelp("bump [semver]", "bump version in package.json (or a direct dep)")
