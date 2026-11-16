@@ -21,6 +21,7 @@ when isMainModule:
   import ./carne/pkg/loader
   import ./carne/pkg/stdsync
   import ./carne/gen/docs as gendocs
+  import ./carne/gen/ast as genast
 
   proc runScriptFile(filePath: string; extraArgs: seq[string]): int =
     ## Execute JS from a file
@@ -306,9 +307,13 @@ when isMainModule:
     echo "usage: carne gen <command> [args] [options]"
     echo ""
     cmdHelp("docs", "generate API reference into carnedocs/ (JSON and/or HTML)")
-    flagHelp("--format:<json|html|all>", "output selection (default: all)")
-    flagHelp("--out:<dir>", "output directory (default: carnedocs)")
+    flagHelp("--format:<json|html|all>", "docs output selection (default: all)")
+    flagHelp("--out:<dir>", "docs output directory (default: carnedocs)")
     flagHelp("--entry:<file>", "document one file instead of the whole package")
+    echo ""
+    cmdHelp("ast <file>", "dump the JavaScript AST of <file> (JSON and/or binary .ast)")
+    flagHelp("--format:<json|ast|all>", "ast output selection (default: all)")
+    flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
 
   proc runGen(args: seq[string]; format, outDir, entry: string): int =
     ## Code generation commands. `gen` groups generator subcommands so
@@ -325,6 +330,13 @@ when isMainModule:
       let f = if format.len > 0: format else: "all"
       let o = if outDir.len > 0: outDir else: "carnedocs"
       return gendocs.docsCommand(getCurrentDir(), f, o, entry)
+    of "ast":
+      if args.len != 2:
+        displayError(
+          "usage: carne gen ast <file> [--format:json|ast|all] [--out:dir]")
+        return 1
+      let f = if format.len > 0: format else: "all"
+      return genast.astCommand(args[1], f, outDir)
     else:
       displayError("unknown gen command `" & args[0] & "`")
       printGenHelp()
