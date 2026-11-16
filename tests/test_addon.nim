@@ -1,4 +1,4 @@
-import std/[json, os, strutils, times, unittest]
+import std/[json, os, sequtils, strutils, times, unittest]
 
 import carne
 import carne/modules
@@ -171,6 +171,25 @@ test "carne source resolution order":
   check addonbuild.resolveCarneSrc("/nonexistent-xyz", "") == ""
   check addonbuild.resolveCarneSrc(repoRoot(), "") ==
     repoRoot() / "src"
+  check addonbuild.checkoutSrcDir(
+    repoRoot() / "tests" / "fixtures" / "addon_hello.nim") ==
+    repoRoot() / "src"
+  check addonbuild.checkoutSrcDir(getTempDir()) == ""
+
+test "closure resolves the repo dependency graph":
+  let fx = repoRoot() / "tests" / "fixtures" / "addon_hello.nim"
+  check addonbuild.rootNimbleDir(fx) == repoRoot()
+  let reqs = addonbuild.nimbleRequires(repoRoot() / "carne.nimble")
+  check "semver" in reqs
+  check "pluginkit" in reqs
+  check "javascriptcore" in reqs
+  check "nim" notin reqs
+  check addonbuild.resolvePkgDirs(getHomeDir(), "semver").len > 0
+  check addonbuild.resolvePkgDirs(getHomeDir(), "no-such-pkg-xyz").len == 0
+  let paths = addonbuild.closurePaths(fx)
+  check paths.anyIt("semver" in it)
+  check paths.anyIt("pluginkit" in it)
+  check paths.anyIt("javascriptcore" in it)
 
 test "carne build --release passes -d:release":
   let dir = getTempDir() / "carne_build_release_test"
