@@ -20,8 +20,10 @@ when isMainModule:
   import ./carne/pkg/upgrade
   import ./carne/pkg/loader
   import ./carne/pkg/stdsync
+  import ./carne/pkg/build
   import ./carne/gen/docs as gendocs
   import ./carne/gen/ast as genast
+  import ./carne/gen/addon as genaddon
 
   proc runScriptFile(filePath: string; extraArgs: seq[string]): int =
     ## Execute JS from a file
@@ -314,6 +316,7 @@ when isMainModule:
     cmdHelp("ast <file>", "dump the JavaScript AST of <file> (JSON or binary .ast)")
     flagHelp("--format:<json|bin>", "ast output selection (default: json)")
     flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
+    cmdHelp("addon <dir>", "scaffold a native addon project in <dir>")
 
   proc runGen(args: seq[string]; format, outDir, entry: string): int =
     ## Code generation commands. `gen` groups generator subcommands so
@@ -337,6 +340,11 @@ when isMainModule:
         return 1
       let f = if format.len > 0: format else: "json"
       return genast.astCommand(args[1], f, outDir)
+    of "addon":
+      if args.len != 2:
+        displayError("usage: carne gen addon <dir>")
+        return 1
+      return genaddon.addonCommand(args[1])
     else:
       displayError("unknown gen command `" & args[0] & "`")
       printGenHelp()
@@ -469,6 +477,12 @@ when isMainModule:
     of "test":
       # test runner over tests/**/*.test.js
       return runTestCommand(positionals)
+    of "build":
+      # compile a native addon (.so/.dylib) from a Nim source
+      if positionals.len != 2:
+        displayError("usage: carne build <input.nim> <output>")
+        return 1
+      return buildCommand(positionals[0], positionals[1])
     of "std":
       # JS-based standard library management
       return runStd(positionals)

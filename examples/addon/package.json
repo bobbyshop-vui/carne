@@ -1,0 +1,8 @@
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "description": "Native addon example for carne",
+  "license": "MIT",
+  "main": "index.js",
+  "keywords": ["carne"]
+}

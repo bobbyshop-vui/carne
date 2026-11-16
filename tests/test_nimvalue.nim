@@ -208,7 +208,7 @@ test "options bags reject arrays":
   except CarneError as e:
     check "expected `object`" in e.msg
 
-test "type mismatch carries the JSDoc block first":
+test "type mismatch carries the message first, JSDoc after":
   try:
     discard runCode("require('std/env').getEnv(42)")
     fail()
@@ -216,7 +216,7 @@ test "type mismatch carries the JSDoc block first":
     check "/*\n * env.getEnv(\"HOME\") -> string | undefined\n */" in e.msg
     check "type mismatch parameter: `key`. Got `number`," &
       " expected `string`" in e.msg
-    check e.msg.find("/*") < e.msg.find("type mismatch")
+    check e.msg.find("type mismatch") < e.msg.find("/*")
 
 test "arity errors carry the JSDoc block after the message":
   try:

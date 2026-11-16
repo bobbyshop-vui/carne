@@ -328,4 +328,10 @@ proc resolvePkgImport*(cfg: DatpkgrConfig,
   let hit = containedHit(root, joined & ".js")
   if hit.len > 0:
     return some(hit)
+  let addonHit = containedHit(root, joined & ".addon")
+  if addonHit.len > 0:
+    return some(addonHit)
+  let nodeHit = containedHit(root, joined & ".node")
+  if nodeHit.len > 0:
+    return some(nodeHit)
   none(string)

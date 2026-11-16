@@ -137,6 +137,20 @@ proc installProcess(ctx: JSContextRef; argv: seq[string];
   setProp(ctx, processObj, "isWorker", toJS(ctx, inHttpWorker()), setupEx)
   setProp(ctx, global, "process", processObj, setupEx)
 
+proc installEntryModule(ctx: JSContextRef; setupEx: ptr JSValueRef) =
+  ## Exposes `module` / `exports` to file-backed entry scripts, so a
+  ## package wrapper (`index.js`) also runs directly via `carne
+  ## index.js`. Set as plain global-object properties (not lexical
+  ## bindings), so a script's own top-level `const module` still
+  ## shadows cleanly. `module.exports` reassignments are not read
+  ## back — the entry's completion value keeps the eval semantics.
+  let global = JSContextGetGlobalObject(ctx)
+  let moduleObj = newObject(ctx)
+  let exportsObj = newObject(ctx)
+  setProp(ctx, moduleObj, "exports", exportsObj, setupEx)
+  setProp(ctx, global, "module", moduleObj, setupEx)
+  setProp(ctx, global, "exports", exportsObj, setupEx)
+
 proc mark(prof: bool; pt: var MonoTime; phase: string) =
   ## CARNE_PROFILE phase timer (dev aid, zero cost when off).
   if prof:
@@ -171,6 +185,8 @@ proc runCodeEx*(code: string; sourceURL = "script.js";
       installProcess(ctx, argv, addr setupEx)
       installRequire(rt, addr setupEx)
       installTimers(rt, addr setupEx)
+      if baseDir.len > 0:
+        installEntryModule(ctx, addr setupEx)
       mark(prof, pt, "install")
       if setupEx != nil:
         raise newException(CarneError,

@@ -156,6 +156,29 @@ proc throwError*(ctx: JSContextRef; msg: string;
   if err != nil:
     exception[] = err
 
+proc throwTypeError*(ctx: JSContextRef; msg: string;
+    exception: ptr JSValueRef) =
+  ## Throws a real JS TypeError with msg (Node parity for argument
+  ## validation). Falls back to a plain Error when the TypeError
+  ## constructor is unreachable. nil-safe like throwError.
+  if exception == nil:
+    return
+  var ex: JSValueRef = nil
+  let global = JSContextGetGlobalObject(ctx)
+  var getEx: JSValueRef = nil
+  let key = newJSString("TypeError")
+  defer: JSStringRelease(key)
+  let ctor = JSObjectGetProperty(ctx, global, key, addr getEx)
+  if getEx == nil and ctor != nil and JSValueIsObject(ctx, ctor) and
+      JSObjectIsFunction(ctx, cast[JSObjectRef](ctor)):
+    var arg = toJS(ctx, msg)
+    let err = JSObjectCallAsFunction(ctx, cast[JSObjectRef](ctor),
+      nil, 1, addr arg, addr ex)
+    if ex == nil and err != nil:
+      exception[] = err
+      return
+  throwError(ctx, msg, exception)
+
 proc setPropChecked*(ctx: JSContextRef; obj: JSObjectRef; name: string;
     value: JSValueRef; fname: string; exception: ptr JSValueRef): bool =
   ## setProp with the std modules' throw contract: direct-result
@@ -279,9 +302,9 @@ proc optSetInt*(ctx: JSContextRef; obj: JSObjectRef; key: string;
 proc checkArity*(argumentCount: csize_t; wantMin, wantMax: int;
     name: string; ctx: JSContextRef;
     exception: ptr JSValueRef; usage: string = ""): bool =
-  ## Validates arg count, throwing a JS Error on mismatch. `usage` is
-  ## appended to the message when provided (the `init` macro fills it
-  ## from the member's `##` doc comment).
+  ## Validates arg count, throwing a JS TypeError on mismatch. `usage`
+  ## is appended to the message when provided (the `init` macro fills
+  ## it from the member's `##` doc comment).
   let n = int(argumentCount)
   if n < wantMin or n > wantMax:
     var msg = name & ": expected "
@@ -291,7 +314,7 @@ proc checkArity*(argumentCount: csize_t; wantMin, wantMax: int;
       msg &= $wantMin & "-" & $wantMax & " argument(s), got " & $n
     if usage.len > 0:
       msg &= "\n" & usage
-    throwError(ctx, msg, exception)
+    throwTypeError(ctx, msg, exception)
     return false
   true
 
@@ -306,7 +329,7 @@ proc checkArityMin*(argumentCount: csize_t; wantMin: int;
       " argument(s), got " & $n
     if usage.len > 0:
       msg &= "\n" & usage
-    throwError(ctx, msg, exception)
+    throwTypeError(ctx, msg, exception)
     return false
   true
 
@@ -346,17 +369,17 @@ proc jsDocBlock*(doc: string): string =
 
 proc throwTypeMismatch*(ctx: JSContextRef; fname, pname, actual, want,
     docBlock: string; exception: ptr JSValueRef) =
-  ## Throws `type mismatch parameter: ...` with the JSDoc block first
-  ## (user format). Without docs the function name prefixes instead so
-  ## the error still names its owner.
+  ## Throws `type mismatch parameter: ...` first with the JSDoc block
+  ## after it (user format). Without docs the function name prefixes
+  ## instead so the error still names its owner.
   var msg = ""
-  if docBlock.len > 0:
-    msg = docBlock & "\n"
-  else:
+  if docBlock.len == 0:
     msg = fname & ": "
   msg &= "type mismatch parameter: `" & pname & "`. Got `" & actual &
     "`, expected `" & want & "`"
-  throwError(ctx, msg, exception)
+  if docBlock.len > 0:
+    msg &= "\n" & docBlock
+  throwTypeError(ctx, msg, exception)
 
 const maxNimValueDepth = 64
 const maxNimValueArrayLen = 100_000
@@ -790,7 +813,7 @@ proc nimArg*(ctx: JSContextRef; args: ptr UncheckedArray[JSValueRef];
   else:
     val = fromJS(ctx, args[i], err)
   if err != "":
-    throwError(ctx, prefix & name & ": argument " & $i & " " & err,
+    throwTypeError(ctx, prefix & name & ": argument " & $i & " " & err,
       exception)
     return false
   true
@@ -831,12 +854,13 @@ proc objArg*(ctx: JSContextRef; args: ptr UncheckedArray[JSValueRef];
   ## fields are converted on demand via getField. Arrays are rejected
   ## (options bags are plain objects). False + JS throw on failure.
   if args[i] == nil:
-    throwError(ctx, name & ": argument " & $i & " is missing", exception)
+    throwTypeError(ctx, name & ": argument " & $i & " is missing",
+      exception)
     return false
   if JSValueGetType(ctx, args[i]) != kJSTypeObject or
       JSValueIsArray(ctx, args[i]):
-    throwError(ctx, name & ": argument " & $i & " expected object, got " &
-      jsKindName(ctx, args[i]), exception)
+    throwTypeError(ctx, name & ": argument " & $i &
+      " expected object, got " & jsKindName(ctx, args[i]), exception)
     return false
   obj = args[i]
   true
@@ -1464,7 +1488,7 @@ proc parseOneParam(p: NimNode; fname: string): ParamSpec =
   error("registerFn " & fname & ": write each parameter as `name: Type`," &
     " `name?: Type` or `name: default(Type, value)`", p)
 
-proc parseHeader(header: NimNode; what: string): tuple[fname: string,
+proc parseHeader*(header: NimNode; what: string): tuple[fname: string,
     params: seq[ParamSpec]] =
   ## Normalizes a `registerFn` header. The command-position header
   ## parses as ObjConstr (colon-first params) or Call (`?`-first or
@@ -1537,10 +1561,16 @@ proc emitCheckedAssign(body: NimNode; b: FnBindings; spec: ParamSpec;
 
 proc emitGuard(body: NimNode; b: FnBindings; idx: int;
     inner: NimNode) =
-  ## `if int(argumentCount) >= idx+1: <inner>` for optional params.
+  ## `if present and not undefined: <inner>` for optional params.
+  ## Explicit `undefined` counts as absent, so JS default-parameter
+  ## semantics hold (f(undefined) uses the default).
   body.add(nnkIfStmt.newTree(nnkElifBranch.newTree(
-    nnkInfix.newTree(newIdentNode(">="),
-      newCall("int", b.argcSym), newLit(idx + 1)),
+    nnkInfix.newTree(newIdentNode("and"),
+      nnkInfix.newTree(newIdentNode(">="),
+        newCall("int", b.argcSym), newLit(idx + 1)),
+      nnkPrefix.newTree(newIdentNode("not"),
+        newCall("JSValueIsUndefined", b.ctxSym,
+          nnkBracketExpr.newTree(b.argsSym, newLit(idx))))),
     inner)))
 
 proc buildCallbackFn*(fname: string; ctxName: string;

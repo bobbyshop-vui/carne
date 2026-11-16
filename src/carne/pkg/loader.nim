@@ -19,6 +19,7 @@ import javascriptcore
 import ../bridge
 import ../modules
 import ./pkgman
+import ./addon
 
 var loaderCfg: DatpkgrConfig = nil
 
@@ -172,17 +173,33 @@ proc requirePkg(ctx: JSContextRef; rt: Runtime; spec: string;
         "\" has no loadable entry (no main/exports/index.js)", exception)
       return nil
     path = resolved.get
-  loadJsFile(ctx, rt, spec, path, exception)
+  if isAddonPath(path):
+    loadAddonFile(ctx, rt, spec, path, exception)
+  else:
+    loadJsFile(ctx, rt, spec, path, exception)
 
 proc requireRelative(ctx: JSContextRef; rt: Runtime; spec: string;
     exception: ptr JSValueRef): JSValueRef =
   ## Resolves `./x` against the requiring file's directory. Cache key is
-  ## the absolute path so different spellings share one instance.
+  ## the absolute path so different spellings share one instance. Native
+  ## addons (`.addon` canonical, `.so`/`.dylib`/`.node` also accepted;
+  ## exact name or an extension probe) load through the addon loader —
+  ## from package files and top-level scripts alike — with symlink
+  ## escapes failing closed.
   if rt.moduleStack.len == 0:
     throwError(ctx, "require: relative import \"" & spec &
       "\" outside a package (only pkg files can use ./...)", exception)
     return nil
   let joined = normalizedPath(rt.moduleStack[^1] / spec)
+  for cand in [joined, joined & ".addon", joined & ".node"]:
+    if isAddonPath(cand) and fileExists(cand):
+      if not insideDir(rt.moduleStack[^1], cand):
+        throwError(ctx, "require: cannot find \"" & spec & "\"",
+          exception)
+        return nil
+      if rt.instances.hasKey(cand):
+        return rt.instances[cand]
+      return loadAddonFile(ctx, rt, cand, cand, exception)
   for cand in [joined, joined & ".js", joined / "index.js"]:
     if fileExists(cand):
       if rt.instances.hasKey(cand):

@@ -277,6 +277,7 @@ proc printHelp*() =
   echo label("Scripting:")
   cmdHelp("run <script.js> [args]", "run a .js file")
   cmdHelp("test [file] [...]", "run tests/**/*.test.js (or the given file)")
+  cmdHelp("build <input.nim> <output>", "compile a native addon (.addon)")
   echo ""
   echo label("Standard library:")
   cmdHelp("std init", "download JS stdlib (std/*) into ~/.carne/std")
@@ -313,6 +314,7 @@ proc printHelp*() =
   cmdHelp("gen ast <file>", "dump the JavaScript AST of <file> (JSON or binary .ast)")
   flagHelp("--format:<json|bin>", "ast output selection (default: json)")
   flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
+  cmdHelp("gen addon <dir>", "scaffold a native addon project in <dir>")
   echo ""
   echo label("Versioning:")
   cmdHelp("bump [semver]", "bump version in package.json (or a direct dep)")

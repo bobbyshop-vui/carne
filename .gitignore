@@ -12,3 +12,8 @@ testresults/
 !/tests/fixtures/*.pem
 clue.lock
 bin/
+plans
+*.addon
+nimble.develop
+nimble.paths
+nimbledeps
