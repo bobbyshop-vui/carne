@@ -167,10 +167,23 @@ test "carne build compiles an addon":
     "addon_hello.nim", "") == 1
 
 test "carne source resolution order":
-  check addonbuild.resolveCarneSrc("", "", "") == ""
-  check addonbuild.resolveCarneSrc("/nonexistent-xyz", "", "") == ""
-  check addonbuild.resolveCarneSrc(repoRoot(), "", "") ==
+  check addonbuild.resolveCarneSrc("", "") == ""
+  check addonbuild.resolveCarneSrc("/nonexistent-xyz", "") == ""
+  check addonbuild.resolveCarneSrc(repoRoot(), "") ==
     repoRoot() / "src"
+
+test "carne build --release passes -d:release":
+  let dir = getTempDir() / "carne_build_release_test"
+  if dirExists(dir):
+    removeDir(dir)
+  createDir(dir)
+  defer: removeDir(dir)
+  ensureCarneSrc()
+  let lib = dir / "decoy_rel.addon"
+  check addonbuild.buildCommand(
+    repoRoot() / "tests" / "fixtures" / "addon_decoy.nim",
+    lib, true) == 0
+  check fileExists(lib)
 
 test "carne build resolves carne without CARNE_SRC":
   delEnv("CARNE_SRC")

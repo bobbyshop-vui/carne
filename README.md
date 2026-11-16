@@ -70,6 +70,7 @@ Scripting:
   run <script.js> [args]    run a .js file
   test [file] [...]         run tests/**/*.test.js (or the given file)
   build <input.nim> <output>  compile a native addon (.addon)
+    --release               optimized build (-d:release)
 
 Standard library:
   std init                  download JS stdlib (std/*) into ~/.carne/std

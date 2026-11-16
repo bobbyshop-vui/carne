@@ -367,6 +367,7 @@ when isMainModule:
     var genFormat = ""
     var genOut = ""
     var genEntry = ""
+    var buildRelease = false
     var isattyFlag = ""
     var hasIsatty = false
     var p = initOptParser(commandLineParams())
@@ -419,6 +420,9 @@ when isMainModule:
           genOut = val
         of "entry":
           genEntry = val
+        of "release":
+          # --release (bare flag): optimized addon build (-d:release).
+          buildRelease = true
         of "isatty":
           # --isatty=true|false (bare --isatty means true): overrides
           # TTY detection for this run's output, CLI and std/terminal.
@@ -480,9 +484,9 @@ when isMainModule:
     of "build":
       # compile a native addon (.so/.dylib) from a Nim source
       if positionals.len != 2:
-        displayError("usage: carne build <input.nim> <output>")
+        displayError("usage: carne build [--release] <input.nim> <output>")
         return 1
-      return buildCommand(positionals[0], positionals[1])
+      return buildCommand(positionals[0], positionals[1], buildRelease)
     of "std":
       # JS-based standard library management
       return runStd(positionals)

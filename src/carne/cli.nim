@@ -278,6 +278,7 @@ proc printHelp*() =
   cmdHelp("run <script.js> [args]", "run a .js file")
   cmdHelp("test [file] [...]", "run tests/**/*.test.js (or the given file)")
   cmdHelp("build <input.nim> <output>", "compile a native addon (.addon)")
+  flagHelp("--release", "optimized build (-d:release)")
   echo ""
   echo label("Standard library:")
   cmdHelp("std init", "download JS stdlib (std/*) into ~/.carne/std")
