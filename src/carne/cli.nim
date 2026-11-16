@@ -310,8 +310,8 @@ proc printHelp*() =
   flagHelp("--format:<json|html|all>", "docs output selection (default: all)")
   flagHelp("--out:<dir>", "docs output directory (default: carnedocs)")
   flagHelp("--entry:<file>", "document one file instead of the whole package")
-  cmdHelp("gen ast <file>", "dump the JavaScript AST of <file> (JSON and/or binary .ast)")
-  flagHelp("--format:<json|ast|all>", "ast output selection (default: all)")
+  cmdHelp("gen ast <file>", "dump the JavaScript AST of <file> (JSON or binary .ast)")
+  flagHelp("--format:<json|bin>", "ast output selection (default: json)")
   flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
   echo ""
   echo label("Versioning:")

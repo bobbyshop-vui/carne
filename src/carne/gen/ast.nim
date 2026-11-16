@@ -1,11 +1,12 @@
 # Carne `carne gen ast` — JavaScript AST dumps to JSON or binary .ast.
 #
-#   carne gen ast <file.js> [--format:json|ast|all] [--out:dir]
+#   carne gen ast <file.js> [--format:json|bin] [--out:dir]
 #
 # Parses one JavaScript file with sweetsyntax and writes its AST beside
-# the input (or into --out): `<base>.json` (pretty, via openparser's
+# the input (or into --out): `<base>.json` (minified, via openparser's
 # generic serializer — the same shape sweetsyntax's own `ast` command
-# prints) and/or `<base>.ast` (binary, via the custom FBE codec below).
+# prints) or `<base>.ast` (binary, via the custom FBE codec below).
+# One output per run; `--format` picks which (default: json).
 #
 # The .ast codec is FBE-framed: magic "CAST" + an FBE root struct
 # (version 1; field 1 = source path, field 2 = top-level nodes as a
@@ -32,10 +33,9 @@ type
     ## A `carne gen ast` usage or codec error (message is user-facing).
 
   AstFormat* = enum
-    ## Output selection for `carne gen ast`.
+    ## Output selection for `carne gen ast` (one or the other, never both).
     afJson
-    afAst
-    afAll
+    afBin
 
 const astParseFeatures = {featAsync, featArrowFn, featGenerators,
   featLabeledStmt, featTemplateLit}
@@ -48,21 +48,19 @@ const
     ## Codec version in the FBE root header. Bump on any wire change.
 
 proc parseAstFormat*(s: string): AstFormat =
-  ## `json` | `ast` | `all` ("" means all). Raises AstError otherwise.
+  ## `json` | `bin` ("" means json). Raises AstError otherwise.
   case s.strip().toLowerAscii()
-  of "", "all":
-    afAll
-  of "json":
+  of "", "json":
     afJson
-  of "ast":
-    afAst
+  of "bin":
+    afBin
   else:
     raise newException(AstError,
-      "unknown format \"" & s.strip() & "\" (want json, ast or all)")
+      "unknown format \"" & s.strip() & "\" (want json or bin)")
 
 proc programToJson*(prog: OpenAstProgram): string =
-  ## Pretty JSON of a parsed program (ends with one newline).
-  pretty(toJsonNode(prog)) & "\n"
+  ## Minified JSON of a parsed program (one line + trailing newline).
+  toJson(prog) & "\n"
 
 proc sameTree*(a, b: Node): bool =
   ## Structural equality of two ASTs (kind, payload, position, children).
@@ -259,7 +257,7 @@ proc bufferToString*(b: Buffer): string =
 
 proc astCommand*(srcPath, formatStr, outDir: string): int =
   ## `carne gen ast` entry point. Returns the process exit code.
-  var format = afAll
+  var format = afJson
   try:
     format = parseAstFormat(formatStr)
   except AstError as e:
@@ -268,7 +266,7 @@ proc astCommand*(srcPath, formatStr, outDir: string): int =
   let src = srcPath.strip()
   if src.len == 0:
     displayError(
-      "usage: carne gen ast <file> [--format:json|ast|all] [--out:dir]")
+      "usage: carne gen ast <file> [--format:json|bin] [--out:dir]")
     return 1
   let absSrc =
     if isAbsolute(src): src else: getCurrentDir() / src
@@ -304,26 +302,27 @@ proc astCommand*(srcPath, formatStr, outDir: string): int =
       getCurrentExceptionMsg())
     return 1
   let base = splitFile(absSrc).name
-  var written: seq[string] = @[]
-  if format in {afJson, afAll}:
+  if format == afJson:
     try:
       writeFile(targetDir / (base & ".json"), programToJson(prog))
-      written.add(base & ".json")
     except OSError, IOError:
       displayError("cannot write " & base & ".json: " &
         getCurrentExceptionMsg())
       return 1
-  if format in {afAst, afAll}:
+    displaySuccess("wrote AST of " & extractFilename(absSrc) & " (" &
+      $prog.nodes.len &
+      " top-level node" & (if prog.nodes.len == 1: "" else: "s") &
+      "): " & base & ".json in " & targetDir)
+  else:
     try:
       writeFile(targetDir / (base & ".ast"),
         bufferToString(encodeProgram(prog, absSrc)))
-      written.add(base & ".ast")
     except OSError, IOError:
       displayError("cannot write " & base & ".ast: " &
         getCurrentExceptionMsg())
       return 1
-  displaySuccess("wrote AST of " & extractFilename(absSrc) & " (" &
-    $prog.nodes.len &
-    " top-level node" & (if prog.nodes.len == 1: "" else: "s") &
-    "): " & written.join(", ") & " in " & targetDir)
+    displaySuccess("wrote AST of " & extractFilename(absSrc) & " (" &
+      $prog.nodes.len &
+      " top-level node" & (if prog.nodes.len == 1: "" else: "s") &
+      "): " & base & ".ast in " & targetDir)
   0

@@ -311,8 +311,8 @@ when isMainModule:
     flagHelp("--out:<dir>", "docs output directory (default: carnedocs)")
     flagHelp("--entry:<file>", "document one file instead of the whole package")
     echo ""
-    cmdHelp("ast <file>", "dump the JavaScript AST of <file> (JSON and/or binary .ast)")
-    flagHelp("--format:<json|ast|all>", "ast output selection (default: all)")
+    cmdHelp("ast <file>", "dump the JavaScript AST of <file> (JSON or binary .ast)")
+    flagHelp("--format:<json|bin>", "ast output selection (default: json)")
     flagHelp("--out:<dir>", "ast output directory (default: alongside the input)")
 
   proc runGen(args: seq[string]; format, outDir, entry: string): int =
@@ -333,9 +333,9 @@ when isMainModule:
     of "ast":
       if args.len != 2:
         displayError(
-          "usage: carne gen ast <file> [--format:json|ast|all] [--out:dir]")
+          "usage: carne gen ast <file> [--format:json|bin] [--out:dir]")
         return 1
-      let f = if format.len > 0: format else: "all"
+      let f = if format.len > 0: format else: "json"
       return genast.astCommand(args[1], f, outDir)
     else:
       displayError("unknown gen command `" & args[0] & "`")

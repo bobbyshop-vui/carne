@@ -34,13 +34,14 @@ proc freshDir(name: string): string =
     removeDir(result)
   createDir(result)
 
-test "parseAstFormat accepts json, ast, all and empty":
-  check parseAstFormat("") == afAll
-  check parseAstFormat("all") == afAll
+test "parseAstFormat accepts json, bin and empty":
+  check parseAstFormat("") == afJson
   check parseAstFormat("json") == afJson
-  check parseAstFormat("AST") == afAst
+  check parseAstFormat("BIN") == afBin
   expect AstError:
     discard parseAstFormat("bogus")
+  expect AstError:
+    discard parseAstFormat("all")
 
 test "programToJson is valid JSON with kinds and names":
   let dir = freshDir("carne_genast_json")
@@ -97,43 +98,42 @@ test "decodeProgram rejects bad magic, versions and truncation":
   expect CatchableError:
     discard decodeProgram(good[0 ..< good.len - 3])
 
-test "astCommand writes JSON and .ast by default":
+test "astCommand writes one output per run, json by default":
   let dir = freshDir("carne_genast_cmd")
   defer: removeDir(dir)
   writeFile(dir / "hello.js",
     "/** Say hello. */\nfunction hello(name = \"world\") {\n" &
     "  return \"Hello, \" + name;\n}\nmodule.exports = { hello };\n")
-  check astCommand(dir / "hello.js", "all", dir / "out") == 0
+  check astCommand(dir / "hello.js", "", dir / "out") == 0
   check fileExists(dir / "out" / "hello.json")
-  check fileExists(dir / "out" / "hello.ast")
+  check not fileExists(dir / "out" / "hello.ast")
   let raw = readFile(dir / "out" / "hello.json")
   check raw.contains("hello")
   check raw.contains("nkFunction")
+  check astCommand(dir / "hello.js", "bin", dir / "outbin") == 0
+  check fileExists(dir / "outbin" / "hello.ast")
+  check not fileExists(dir / "outbin" / "hello.json")
   let prog = parseScript(dir / "hello.js", jsHandlers, jsFeatures)
-  let (back, _) = decodeProgram(strToBytes(readFile(dir / "out" /
+  let (back, _) = decodeProgram(strToBytes(readFile(dir / "outbin" /
       "hello.ast")))
   check sameProgram(prog, back)
 
-test "astCommand honors single formats and defaults beside input":
+test "astCommand honors explicit json and defaults beside input":
   let dir = freshDir("carne_genast_fmt")
   defer: removeDir(dir)
   writeFile(dir / "a.js", "const x = 1;\n")
   check astCommand(dir / "a.js", "json", "") == 0
   check fileExists(dir / "a.json")
   check not fileExists(dir / "a.ast")
-  removeFile(dir / "a.json")
-  check astCommand(dir / "a.js", "ast", "") == 0
-  check fileExists(dir / "a.ast")
-  check not fileExists(dir / "a.json")
 
 test "astCommand errors on missing files, extensions and syntax":
   let dir = freshDir("carne_genast_err")
   defer: removeDir(dir)
-  check astCommand(dir / "nope.js", "all", "") == 1
+  check astCommand(dir / "nope.js", "json", "") == 1
   writeFile(dir / "a.txt", "hello")
-  check astCommand(dir / "a.txt", "all", "") == 1
+  check astCommand(dir / "a.txt", "json", "") == 1
   writeFile(dir / "bad.js", "const = ;\n")
-  check astCommand(dir / "bad.js", "all", "") == 1
+  check astCommand(dir / "bad.js", "bin", "") == 1
   writeFile(dir / "ok.js", "const x = 1;\n")
   check astCommand(dir / "ok.js", "bogus", "") == 1
-  check astCommand("", "all", "") == 1
+  check astCommand("", "json", "") == 1
