@@ -20,6 +20,7 @@ when isMainModule:
   import ./carne/pkg/upgrade
   import ./carne/pkg/loader
   import ./carne/pkg/stdsync
+  import ./carne/gen/docs as gendocs
 
   proc runScriptFile(filePath: string; extraArgs: seq[string]): int =
     ## Execute JS from a file
@@ -301,6 +302,34 @@ when isMainModule:
       printStdHelp()
       return 1
 
+  proc printGenHelp() =
+    echo "usage: carne gen <command> [args] [options]"
+    echo ""
+    cmdHelp("docs", "generate API reference into carnedocs/ (JSON and/or HTML)")
+    flagHelp("--format:<json|html|all>", "output selection (default: all)")
+    flagHelp("--out:<dir>", "output directory (default: carnedocs)")
+    flagHelp("--entry:<file>", "document one file instead of the whole package")
+
+  proc runGen(args: seq[string]; format, outDir, entry: string): int =
+    ## Code generation commands. `gen` groups generator subcommands so
+    ## future generators slot in beside `docs`.
+    if args.len == 0:
+      printGenHelp()
+      return 1
+    case args[0]
+    of "docs":
+      if args.len > 1:
+        displayError(
+          "usage: carne gen docs [--format:json|html|all] [--out:dir] [--entry:file]")
+        return 1
+      let f = if format.len > 0: format else: "all"
+      let o = if outDir.len > 0: outDir else: "carnedocs"
+      return gendocs.docsCommand(getCurrentDir(), f, o, entry)
+    else:
+      displayError("unknown gen command `" & args[0] & "`")
+      printGenHelp()
+      return 1
+
   proc main(): int =
     var command = ""
     var positionals: seq[string] = @[]
@@ -315,6 +344,9 @@ when isMainModule:
     var bumpDep = ""
     var bumpPending = ""
     var bumpMissing = ""
+    var genFormat = ""
+    var genOut = ""
+    var genEntry = ""
     var isattyFlag = ""
     var hasIsatty = false
     var p = initOptParser(commandLineParams())
@@ -361,6 +393,12 @@ when isMainModule:
             bumpDep = val
           else:
             bumpPending = "dep"
+        of "format":
+          genFormat = val
+        of "out":
+          genOut = val
+        of "entry":
+          genEntry = val
         of "isatty":
           # --isatty=true|false (bare --isatty means true): overrides
           # TTY detection for this run's output, CLI and std/terminal.
@@ -422,6 +460,9 @@ when isMainModule:
     of "std":
       # JS-based standard library management
       return runStd(positionals)
+    of "gen":
+      # code generation commands (docs now, more generators later)
+      return runGen(positionals, genFormat, genOut, genEntry)
     else:
       # default command: a bare script path runs like `run <script>`
       if positionals.len >= 0 and fileExists(command):

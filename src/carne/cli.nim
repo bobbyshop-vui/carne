@@ -305,6 +305,12 @@ proc printHelp*() =
   flagHelp("--dry-run", "no network, git, or secret changes")
   flagHelp("--yes", "skip confirmation prompts")
   echo ""
+  echo label("Generating:")
+  cmdHelp("gen docs", "generate API reference into carnedocs/ (JSON and/or HTML)")
+  flagHelp("--format:<json|html|all>", "output selection (default: all)")
+  flagHelp("--out:<dir>", "output directory (default: carnedocs)")
+  flagHelp("--entry:<file>", "document one file instead of the whole package")
+  echo ""
   echo label("Versioning:")
   cmdHelp("bump [semver]", "bump version in package.json (or a direct dep)")
   flagHelp("--level:<level>", "major, minor, or patch")
