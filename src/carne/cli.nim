@@ -266,6 +266,57 @@ proc resolveTestArg*(arg: string; root = "tests"): string =
       return c
   ""
 
+const carneCommands* = ["run", "pkg", "bump", "dump", "upgrade", "test",
+  "build", "std", "gen"]
+  ## First-word commands owned by carne's own option parser (see
+  ## main in carne.nim). Anything else naming an existing file runs
+  ## as a bare script.
+
+proc splitScriptArgs*(raw: seq[string]): tuple[cli: seq[string],
+    extra: seq[string]] =
+  ## Splits raw argv into the part carne's option parser sees and the
+  ## verbatim tail handed to the script. For `run <script> ...` (and a
+  ## bare `<script> ...`) everything after the script path belongs to
+  ## the script, so carne's own flags must come before it. All other
+  ## commands parse the full argv exactly as before.
+  var cmdIdx = -1
+  var i = 0
+  var pendingOpt = false  # bare --level/--dep awaiting its value (bump only)
+  while i < raw.len:
+    let t = raw[i]
+    if pendingOpt:
+      pendingOpt = false
+      i.inc
+      continue
+    if t == "--level" or t == "--dep":
+      pendingOpt = true
+      i.inc
+      continue
+    if t.len > 1 and t[0] == '-':
+      i.inc
+      continue
+    cmdIdx = i
+    break
+  if cmdIdx < 0:
+    return (raw, @[])
+  if raw[cmdIdx] == "run":
+    # No script yet (`carne run`, `carne run --help`): legacy path
+    # keeps carne's own help and missing-script errors working.
+    if cmdIdx + 1 < raw.len:
+      let s = raw[cmdIdx + 1]
+      if s.len > 0 and not (s.len > 1 and s[0] == '-'):
+        result.cli = raw[0 .. cmdIdx + 1]
+        if cmdIdx + 2 < raw.len:
+          result.extra = raw[cmdIdx + 2 .. ^1]
+        return
+    return (raw, @[])
+  if raw[cmdIdx] notin carneCommands and fileExists(raw[cmdIdx]):
+    result.cli = raw[0 .. cmdIdx]
+    if cmdIdx + 1 < raw.len:
+      result.extra = raw[cmdIdx + 1 .. ^1]
+    return
+  (raw, @[])
+
 proc printHelp*() =
   printBanner()
   echo grey("A JavaScript runtime in Nim")
@@ -275,7 +326,7 @@ proc printHelp*() =
   echo "usage: carne <command> [args] [options]"
   echo ""
   echo label("Scripting:")
-  cmdHelp("run <script.js> [args]", "run a .js file")
+  cmdHelp("run <script.js> [args]", "run a .js file (script args pass through verbatim)")
   cmdHelp("test [file] [...]", "run tests/**/*.test.js (or the given file)")
   cmdHelp("build <input.nim> <output>", "compile a native addon (.addon)")
   flagHelp("--release", "optimized build (-d:release)")

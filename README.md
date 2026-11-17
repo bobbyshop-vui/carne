@@ -67,7 +67,7 @@ A JavaScript runtime in Nim
 usage: carne <command> [args] [options]
 
 Scripting:
-  run <script.js> [args]    run a .js file
+  run <script.js> [args]    run a .js file (script args pass through verbatim)
   test [file] [...]         run tests/**/*.test.js (or the given file)
   build <input.nim> <output>  compile a native addon (.addon)
     --release               optimized build (-d:release)

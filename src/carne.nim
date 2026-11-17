@@ -370,7 +370,12 @@ when isMainModule:
     var buildRelease = false
     var isattyFlag = ""
     var hasIsatty = false
-    var p = initOptParser(commandLineParams())
+    # Verbatim script tail: for `run <script> ...` (and a bare
+    # `<script> ...`) everything after the script path bypasses
+    # carne's option parser and reaches the script untouched.
+    let split = splitScriptArgs(commandLineParams())
+    let runExtra = split.extra
+    var p = initOptParser(split.cli)
     for kind, key, val in p.getopt():
       case kind
       of cmdArgument:
@@ -465,7 +470,7 @@ when isMainModule:
         return 1
       let script = positionals[0]
       let extra = if positionals.len > 1: positionals[1 .. ^1] else: @[]
-      return runScriptFile(script, extra)
+      return runScriptFile(script, extra & runExtra)
     of "pkg":
       # package management on the ~/.carne home
       return runPkg(positionals, pkgUrl, pkgTags, pkgWeb, pkgDryRun, pkgYes)
@@ -496,7 +501,7 @@ when isMainModule:
     else:
       # default command: a bare script path runs like `run <script>`
       if positionals.len >= 0 and fileExists(command):
-        return runScriptFile(command, positionals)
+        return runScriptFile(command, positionals & runExtra)
       displayError("unknown command `" & command & "`")
       printHelp()
       return 1
