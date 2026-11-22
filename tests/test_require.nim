@@ -1,3 +1,4 @@
+import std/os
 import std/strutils
 import unittest
 
@@ -74,3 +75,15 @@ test "module exportClass creates checked constructors":
     "try { new (require('std/point').Point)(); 'no' } " &
     "catch (e) { e.constructor.name + ':' + e.message.split('\\n')[0] }") ==
     "TypeError:Point: expected 1 argument(s), got 0"
+
+test "require()d files stay synchronous (no top-level await)":
+  let dir = getTempDir() / "carne_tla_require_test"
+  if dirExists(dir):
+    removeDir(dir)
+  createDir(dir)
+  defer: removeDir(dir)
+  writeFile(dir / "tla.js",
+    "const v = await Promise.resolve(1);\nmodule.exports = v;\n")
+  writeFile(dir / "main.js", "require(\"./tla\");\n")
+  expect CarneError:
+    discard runFile(dir / "main.js")
