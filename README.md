@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/openpeeps/carne/blob/main/.github/carne_logo.png" alt="Carne Logo" width="140px" height="140px"><br>
+  <img src="https://github.com/getcarne/carne/blob/main/.github/carne_logo.png" alt="Carne Logo" width="140px" height="140px"><br>
   Carne /kär-nē/ &bullet; a JavaScript runtime 👑 Written in Nim language
 </p>
 
@@ -8,8 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="https://getcarne.github.io/carne">API reference</a><br>
-  <img src="https://github.com/openpeeps/carne/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/openpeeps/carne/workflows/docs/badge.svg" alt="Github Actions">
+  <a href="https://getcarne.github.io/docs/">API reference</a><br>
+  <img src="https://github.com/gercarne/carne/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/getcarne/carne/workflows/docs/badge.svg" alt="Github Actions">
 </p>
 
 > [!NOTE]
@@ -295,7 +295,7 @@ processing, crypto, networking, and developer tools:
 - `std/test` - minimal test runner (test/describe/expect/assert, fetched via `carne std init`)
 - `std/db` - async + sync database driver and ORM (sqlite, postgres, fetched via `carne std init`)
 
-Full API reference with examples: https://openpeeps.github.io/carne/
+Full API reference with examples: https://getcarne.github.io/docs/
 
 ## Roadmap
 - [x] JSC runtime: console/process/require/timers CLI
@@ -366,8 +366,8 @@ Bodies are byte-identical (11 bytes); headers differ per runtime, so
 `ps` during the measured run (includes shared libraries).
 
 ### ❤ Contributions & Support
-- 🐛 Found a bug? [Create a new Issue](https://github.com/openpeeps/carne/issues)
-- 👋 Wanna help? [Fork it!](https://github.com/openpeeps/carne/fork)
+- 🐛 Found a bug? [Create a new Issue](https://github.com/getcarne/carne/issues)
+- 👋 Wanna help? [Fork it!](https://github.com/getcarne/carne/fork)
 
 ### 🎩 License
 MIT license. [Made by Humans from OpenPeeps](https://github.com/openpeeps).<br>
