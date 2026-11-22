@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://getcarne.github.io/docs/">API reference</a><br>
-  <img src="https://github.com/gercarne/carne/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/getcarne/carne/workflows/docs/badge.svg" alt="Github Actions">
+  <img src="https://github.com/getcarne/carne/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/getcarne/carne/workflows/docs/badge.svg" alt="Github Actions">
 </p>
 
 > [!NOTE]
