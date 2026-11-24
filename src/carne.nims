@@ -1,1 +1,2 @@
-switch("threads", "on")
+--threads:on
+--define:boogieNoCrashHandlers
