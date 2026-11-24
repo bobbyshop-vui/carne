@@ -27,9 +27,9 @@ Status notes (verified in tree):
 - `std/mimetype` defers `charset` (`src/carne/std/mimetype.nim:15`), exposes lookup, info, isExtension, has.
 
 Tasks:
-- [ ] `std/path`: add format, join, normalize to complement `parse`. Keep absent options absent.
-- [ ] `std/mimetype`: add `charset` handling, keep exact lowercase match behavior.
-- [ ] Docs correction: update README std list for html, vcard, feed now that serialize exists. Add verified round-trip examples.
+- [x] `std/path`: add format, join, normalize to complement `parse`. Keep absent options absent.
+- [x] `std/mimetype`: add `charset` handling, keep exact lowercase match behavior.
+- [x] Docs correction: update README std list for html, vcard, feed now that serialize exists. Add verified round-trip examples.
 - [ ] `std/sql`: harden dialect parity and error messages, keep validate behavior stable.
 - [ ] `std/db`: sqlite + postgres driver gaps, sync vs async parity, placeholder rules (`?` vs `$N`), lazy libpq load, JS ORM builder and migration coverage (`src/carne/std/db.nim:1`).
 - [ ] JS shims (`std/js/*`): keep manifest versioning and `stdsync` refresh path tested.

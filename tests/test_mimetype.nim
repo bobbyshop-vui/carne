@@ -34,3 +34,15 @@ test "isExtension and has answer existence":
 test "lookup rejects non-string input":
   expect CarneError:
     discard runCode("require('std/mimetype').lookup(42)")
+
+test "charset reflects bundled defaults":
+  check runCode("require('std/mimetype').charset('application/json')") ==
+    "UTF-8"
+  check runCode("require('std/mimetype').charset('text/css')") == "UTF-8"
+  check runCode("require('std/mimetype').charset('image/png')") == "null"
+  check runCode("require('std/mimetype').charset('text/html')") == "null"
+  check runCode("require('std/mimetype').charset('nope/x')") == "null"
+
+test "charset rejects non-string input":
+  expect CarneError:
+    discard runCode("require('std/mimetype').charset(42)")

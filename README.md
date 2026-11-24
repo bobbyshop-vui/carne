@@ -15,8 +15,7 @@
 > [!NOTE]
 > Carne is still experimental: it runs on macOS and Linux
 > (Linux needs `libjavascriptcoregtk-4.1-dev` installed), the `std/*` API
-> may change between 0.x releases, and a few modules are parse-only
-> in v1 (see the Standard Library notes below). Entry scripts support
+> may change between 0.x releases. Entry scripts support
 > top-level `await`; package `require()` remains synchronous. Not recommended
 > for production yet, but the full test suite passes on both platforms
 > and every example below is covered by it.
@@ -223,6 +222,12 @@ carne gen addon hello   # scaffold a wrapper package
 carne build native/hello.nim native/hello.addon
 ```
 
+Building requires carne as a Nim package, via nimble or clue.
+`require("./x.addon")` works from any JS file (package or script);
+one library loads per process with fresh exports per context, and
+the loader major-matches the addon against the host carne. See
+`examples/addon/` for the full wrapper pattern.
+
 ### Module DSL classes
 Modules built with `init` can export constructors alongside functions and
 properties. The constructor body returns the instance object:
@@ -242,12 +247,6 @@ init proc(module: Module) =
 The exported value is a JavaScript constructor, so instances inherit its
 prototype and pass `instanceof Point`.
 
-Building requires carne as a Nim package, via nimble or clue.
-`require("./x.addon")` works from any JS file (package or script);
-one library loads per process with fresh exports per context, and
-the loader major-matches the addon against the host carne. See
-`examples/addon/` for the full wrapper pattern.
-
 ## Standard Library
 
 All modules load lazily via the global `require("std/<name>")`,
@@ -266,20 +265,20 @@ processing, crypto, networking, and developer tools:
 - `std/ical` - iCalendar parsing and serialization
 - `std/plist` - Apple property lists
 - `std/bson` - BSON parsing and serialization
-- `std/csv` - CSV parsing
+- `std/csv` - CSV parsing and serialization
 - `std/xml` - XML parsing and serialization
-- `std/html` - HTML parsing (parse-only in v1)
-- `std/vcard` - vCard contact parsing (parse-only in v1)
-- `std/feed` - RSS and Atom feed parsing (parse-only in v1)
+- `std/html` - HTML parsing and serialization
+- `std/vcard` - vCard contact parsing and serialization
+- `std/feed` - RSS and Atom feed parsing and serialization
 - `std/sql` - SQL parsing and validation (sqlite, postgres, mysql)
 - `std/crypto` - hashing, AEAD/XChaCha20-Poly1305 + AES-GCM sealing, ed25519/X25519, ECDSA/ECDH, RSA, passwords
-- `std/path` - file-path and URL parsing (parse-only in v1)
+- `std/path` - file-path and URL parsing, formatting, joining, normalization
 - `std/colors` - color parsing, formatting and math (fetched via `carne std init`)
 - `std/css` - CSS parsing and declaration validation
 - `std/diff` - unified diffs
 - `std/gettext` - `.po` parsing and translation, `.mo` file catalogs
 - `std/str` - string utilities and validators (fetched via `carne std init`)
-- `std/mimetype` - MIME type lookup
+- `std/mimetype` - MIME type lookup, info, and default charset
 - `std/benchmark` - in-process microbenchmarking
 - `std/qr` - QR code generation (model2/model1/micro/rmqr/aqr/sqrc), matrix decoding, payload builders
 - `std/svg` - SVG parsing and serialization
