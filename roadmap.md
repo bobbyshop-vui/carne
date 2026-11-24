@@ -40,11 +40,11 @@ Verify: `clue test test_html test_vcard test_feed test_path test_csv test_sql te
 
 Base: `src/carne/std/os.nim:29` (`exec` blocks loop), `src/carne/std/terminal.nim:14-15` (blocking reads), `src/carne/std/watcher.nim:8-13` (watch vs watchOnce).
 
-- [ ] `std/os`: file and dir ops stay sync. Add streaming spawn with stdout and stderr chunks and exit code. Keep `exec` capture-only behavior unchanged.
-- [ ] `std/terminal`: keep blocking `readLine` and `readPassword` contract explicit, document server stall risk. Keep `write` newline-free, TTY detection, `--isatty` override, `parseArgs` parity.
-- [ ] `std/watcher`: define async `watch` close semantics (final, idempotent), `watchOnce` timeout behavior, and behavior in http workers.
-- [ ] `std/env`: args, env parse and load, cwd, exit codes. No behavior change, coverage only.
-- [ ] `std/benchmark`: keep as regression harness for core and std perf checks.
+- [x] `std/os`: file and dir ops stay sync. Add streaming spawn with stdout and stderr chunks and exit code. Keep `exec` capture-only behavior unchanged.
+- [x] `std/terminal`: keep blocking `readLine` and `readPassword` contract explicit, document server stall risk. Keep `write` newline-free, TTY detection, `--isatty` override, `parseArgs` parity.
+- [x] `std/watcher`: define async `watch` close semantics (final, idempotent), `watchOnce` timeout behavior, and behavior in http workers.
+- [x] `std/env`: args, env parse and load, cwd, exit codes. No behavior change, coverage only.
+- [x] `std/benchmark`: keep as regression harness for core and std perf checks.
 
 Verify: `clue test test_os test_terminal test_watcher test_env test_benchmark`, manual TTY and pipe runs.
 

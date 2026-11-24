@@ -257,7 +257,7 @@ The library covers OS and process access, data formats, text
 processing, crypto, networking, and developer tools:
 
 - `std/env` - process info and environment (args, getEnv, putEnv, delEnv, hasEnv, parse/load `.env`, cwd, exit)
-- `std/os` - synchronous OS utilities (files, dirs, exec)
+- `std/os` - files, dirs, sync exec plus async spawn with streaming stdout/stderr
 - `std/archive` - archive creation/extraction and compression (tar, zip, rar, gz, lz4, bz2, brotli)
 - Timers - `setTimeout`/`setInterval`/`sleep` globals, no require needed
 - `std/yaml` - YAML parsing and serialization

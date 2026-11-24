@@ -275,6 +275,44 @@ test "os exec captures code and output":
   check runCode("require('std/os').exec('echo hi').code") == "0"
   check runCode("require('std/os').exec('exit 3').code") == "3"
 
+test "os spawn resolves code, stdout and stderr":
+  check runCode("(async () => { " &
+    "const r = await require('std/os').spawn('echo hi'); " &
+    "return r.code + ':' + JSON.stringify(r.stdout) + ':' + " &
+    "JSON.stringify(r.stderr); })()") == "0:\"hi\\n\":\"\""
+  check runCode("(async () => { " &
+    "const r = await require('std/os').spawn('echo o; echo e >&2'); " &
+    "return r.code + ':' + JSON.stringify(r.stdout) + ':' + " &
+    "JSON.stringify(r.stderr); })()") == "0:\"o\\n\":\"e\\n\""
+  check runCode("(async () => { " &
+    "return (await require('std/os').spawn('exit 3')).code; })()") ==
+    "3"
+
+test "os spawn streams chunks to callbacks":
+  check runCode("(async () => { " &
+    "let out = '', err = ''; " &
+    "const r = await require('std/os').spawn(" &
+    "'echo a; echo b >&2; echo c', " &
+    "{onStdout: (s) => { out += s; }, " &
+    "onStderr: (s) => { err += s; }}); " &
+    "return r.code + ':' + JSON.stringify(out) + ':' + " &
+    "JSON.stringify(err) + ':' + (out === r.stdout) + ':' + " &
+    "(err === r.stderr); })()") ==
+    "0:\"a\\nc\\n\":\"b\\n\":true:true"
+
+test "os spawn closes stdin":
+  check runCode("(async () => { " &
+    "const r = await require('std/os').spawn('cat'); " &
+    "return r.code + ':' + JSON.stringify(r.stdout); })()") ==
+    "0:\"\""
+
+test "os spawn rejects bad callbacks":
+  expect CarneError:
+    discard runCode(
+      "require('std/os').spawn('echo hi', {onStdout: 42})")
+  expect CarneError:
+    discard runCode("require('std/os').spawn()")
+
 test "os rejects bad arity and types":
   expect CarneError:
     discard runCode("require('std/os').readFile()")

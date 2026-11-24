@@ -46,6 +46,10 @@ test "env.exit sets exit code":
   check res.code == 3
   check res.output == ""
 
+test "env.exit defaults to zero":
+  let res = runCodeEx("require('std/env').exit()")
+  check res.code == 0
+
 test "env.parse with expansion":
   let res = runCode(
     "JSON.stringify(require('std/env').parse(" &
@@ -67,6 +71,19 @@ test "env.load writes process env":
 test "env.load missing file is a no-op":
   discard runCode(
     "require('std/env').load('/no/such/carne_dotenv_xyz')")
+
+test "env.load override replaces existing":
+  let p = getTempDir() / "carne_dotenv_override"
+  defer: removeFile(p)
+  writeFile(p, "CARNE_DOTENV_OVR=first\n")
+  discard runCode("require('std/env').load('" & p & "')")
+  check runCode("require('std/env').getEnv('CARNE_DOTENV_OVR')") == "first"
+  writeFile(p, "CARNE_DOTENV_OVR=second\n")
+  discard runCode("require('std/env').load('" & p & "')")
+  check runCode("require('std/env').getEnv('CARNE_DOTENV_OVR')") == "first"
+  discard runCode("require('std/env').load('" & p & "', true)")
+  check runCode("require('std/env').getEnv('CARNE_DOTENV_OVR')") == "second"
+  delEnv("CARNE_DOTENV_OVR")
 
 test "env.parse error shape":
   expect CarneError:

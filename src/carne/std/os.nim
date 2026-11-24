@@ -27,13 +27,24 @@
 #   os.pid()                  -> int
 #   os.cpuCount()             -> int (logical processors, >= 1)
 #   os.exec(cmd)              -> {code, output} (blocks the loop)
+#   os.spawn(cmd[, {onStdout, onStderr}])
+#     -> Promise<{code, stdout, stderr}> (async, loop-friendly: chunks
+#        stream to the callbacks while the process runs; stdin arrives
+#        closed, so readers see EOF)
 #
 # Everything throws a JS Error on failure. exec blocks the
 # event loop like any sync call: fine in scripts, stalls servers.
+# spawn never blocks: it polls the pipes on the shared loop and
+# settles the promise on exit.
 
-import std/[algorithm, json, memfiles, os, osproc, times]
+import std/[algorithm, json, memfiles, os, osproc, streams, times]
+
+when not defined(windows):
+  import std/posix
 
 import javascriptcore
+
+from powpow/loop import Loop, TimerId, addInterval, cancelTimer, stop
 
 import ../bridge
 
@@ -43,7 +54,7 @@ proc kindName(pc: PathComponent): string =
   of pcDir: "dir"
   of pcLinkToFile, pcLinkToDir: "symlink"
 
-proc toMs(t: Time): int64 =
+proc toMs(t: times.Time): int64 =
   int64(t.toUnix()) * 1000 + int64(t.nanosecond div 1_000_000)
 
 proc statToJson(info: FileInfo): JsonNode =
@@ -113,6 +124,161 @@ const mmapThreshold = 64 * 1024
   ## readFile maps instead of reading past this size: below it the
   ## mmap syscall + page-table cost exceeds one streaming read, and
   ## the bridge string snapshot (~1us/KB) dominates either way.
+
+const spawnPollMs = 10
+  ## spawn pipe poll cadence: chunks surface within ~10ms while each
+  ## tick stays a non-blocking drain, never stalling the loop.
+
+type
+  SpawnState = ref object
+    p: Process
+    ctx: JSContextRef
+    rt: Runtime
+    loop: Loop
+    timerId: TimerId
+    onOut, onErr: JSObjectRef
+    resolveFn, rejectFn: JSObjectRef
+    promise: JSValueRef
+    outAcc, errAcc: string
+    outEof, errEof: bool
+    settled: bool
+
+proc decSpawnPending(rt: Runtime) =
+  dec rt.pending
+  if rt.pending <= 0 and not rt.exitRequested:
+    rt.pending = 0
+    rt.loop.stop()
+
+when not defined(windows):
+  proc setNonBlockFd(fd: FileHandle) =
+    ## Best-effort O_NONBLOCK so spawn polls never stall the loop.
+    let flags = fcntl(cast[cint](fd), F_GETFL, 0)
+    if flags >= 0:
+      discard fcntl(cast[cint](fd), F_SETFL, flags or O_NONBLOCK)
+
+  proc readAvailFd(fd: FileHandle; eof: var bool): string =
+    ## Non-blocking drain: data read so far, eof when the writer is
+    ## gone. EAGAIN just ends the slice; other errors raise.
+    eof = false
+    const BufSize = 65536
+    var buf = newString(BufSize)
+    while true:
+      let n = read(cast[cint](fd), addr buf[0], BufSize)
+      if n > 0:
+        result.add(buf[0 ..< n])
+      elif n == 0:
+        eof = true
+        break
+      else:
+        let e = osLastError()
+        if e == OSErrorCode(EAGAIN) or e == OSErrorCode(EWOULDBLOCK):
+          break
+        raise newException(OSError, "read failed: " & $e)
+
+proc fireSpawnCb(st: SpawnState; fn: JSObjectRef; chunk: string) =
+  ## Runs one stdout/stderr chunk callback inside JS. Callback throws
+  ## are recorded as uncaught (exit 1 after drain) without killing
+  ## the spawn: remaining chunks still stream.
+  if fn == nil:
+    return
+  var ex: JSValueRef = nil
+  var arg = toJS(st.ctx, chunk)
+  discard JSObjectCallAsFunction(st.ctx, fn, nil, 1, addr arg, addr ex)
+  if ex != nil:
+    if st.rt.uncaught.len == 0:
+      st.rt.uncaught = valueToString(st.ctx, ex)
+      st.rt.exitCode = 1
+
+proc settleSpawn(st: SpawnState; code: int; errMsg: string) =
+  ## Resolves {code, stdout, stderr} or rejects, then releases the
+  ## timer, the process and every protected handle. Idempotent.
+  if st.settled:
+    return
+  st.settled = true
+  try:
+    st.loop.cancelTimer(st.timerId)
+  except CatchableError:
+    discard
+  try:
+    close(st.p)
+  except CatchableError:
+    discard
+  var e2: JSValueRef = nil
+  if errMsg == "":
+    var node = newJObject()
+    node["code"] = %code
+    node["stdout"] = %st.outAcc
+    node["stderr"] = %st.errAcc
+    let v = returnJson(st.ctx, node, "spawn", nil)
+    if v == nil:
+      let m = toJS(st.ctx, "spawn: could not convert result to JS")
+      let errObj = JSObjectMakeError(st.ctx, 1, unsafeAddr m, addr e2)
+      var arg = if errObj != nil: errObj else: m
+      discard JSObjectCallAsFunction(st.ctx, st.rejectFn, nil, 1,
+        addr arg, addr e2)
+    else:
+      var vv = v
+      JSValueProtect(st.ctx, v)
+      discard JSObjectCallAsFunction(st.ctx, st.resolveFn, nil, 1,
+        addr vv, addr e2)
+      JSValueUnprotect(st.ctx, v)
+  else:
+    let m = toJS(st.ctx, errMsg)
+    let errObj = JSObjectMakeError(st.ctx, 1, unsafeAddr m, addr e2)
+    var arg = if errObj != nil: errObj else: m
+    discard JSObjectCallAsFunction(st.ctx, st.rejectFn, nil, 1,
+      addr arg, addr e2)
+  if st.onOut != nil:
+    JSValueUnprotect(st.ctx, st.onOut)
+  if st.onErr != nil:
+    JSValueUnprotect(st.ctx, st.onErr)
+  JSValueUnprotect(st.ctx, st.promise)
+  JSValueUnprotect(st.ctx, st.resolveFn)
+  JSValueUnprotect(st.ctx, st.rejectFn)
+  decSpawnPending(st.rt)
+
+proc drainSpawnStream(st: SpawnState; isOut: bool) =
+  ## One non-blocking drain of a single pipe: accumulate, stream the
+  ## chunk to its callback, latch EOF. Read errors fail the spawn.
+  when defined(windows):
+    discard
+  else:
+    var eof = false
+    let chunk =
+      if isOut: readAvailFd(st.p.outputHandle, eof)
+      else: readAvailFd(st.p.errorHandle, eof)
+    if chunk.len > 0:
+      if isOut:
+        st.outAcc.add(chunk)
+        fireSpawnCb(st, st.onOut, chunk)
+      else:
+        st.errAcc.add(chunk)
+        fireSpawnCb(st, st.onErr, chunk)
+    if isOut:
+      st.outEof = eof
+    else:
+      st.errEof = eof
+
+proc pollSpawn(st: SpawnState) =
+  ## Loop-tick poll: drain whatever the process wrote, settle with
+  ## the exit code once it leaves (final drain first, so no tail
+  ## bytes are lost between the last tick and the exit).
+  if st.settled:
+    return
+  try:
+    if not st.outEof:
+      drainSpawnStream(st, true)
+    if not st.errEof:
+      drainSpawnStream(st, false)
+    let code = peekExitCode(st.p)
+    if code != -1:
+      if not st.outEof:
+        drainSpawnStream(st, true)
+      if not st.errEof:
+        drainSpawnStream(st, false)
+      settleSpawn(st, code, "")
+  except CatchableError as e:
+    settleSpawn(st, -1, "spawn: " & e.msg)
 
 proc readFileFast(path: string): string =
   ## readFile with an mmap fast path for large regular files. Small,
@@ -428,3 +594,69 @@ init proc(module: Module) =
       except IOError as e:
         throwError(ctx, "exec: " & e.msg, exception)
         nil
+
+    module.registerFn spawn(cmd: string, optsObj ?: JSObjectRef):
+      ## os.spawn(cmd[, {onStdout, onStderr}]) -> Promise<{code, stdout, stderr}>
+      ## (async and loop-friendly: chunks stream to the callbacks while
+      ## the process runs; stdin arrives closed, so readers see EOF)
+      var onOut, onErr: JSObjectRef = nil
+      if optsObj != nil:
+        for (key, dst) in [("onStdout", addr onOut),
+            ("onStderr", addr onErr)]:
+          var ferr = ""
+          let f = getField(ctx, optsObj, key, ferr)
+          if ferr != "":
+            throwError(ctx, "spawn: options." & key & " " & ferr,
+              exception)
+            return nil
+          case f.kind
+          of nvkFunction:
+            dst[] = f.raw
+          of nvkUndefined, nvkNull:
+            discard
+          else:
+            throwError(ctx, "spawn: options." & key &
+              " must be a function, got " & jsTypeName(f.kind), exception)
+            return nil
+      var p: Process = nil
+      try:
+        p = startProcess(cmd, options = {poEvalCommand})
+        streams.close(p.inputStream)
+        when not defined(windows):
+          setNonBlockFd(p.outputHandle)
+          setNonBlockFd(p.errorHandle)
+      except CatchableError as e:
+        if p != nil:
+          try:
+            close(p)
+          except CatchableError:
+            discard
+        throwError(ctx, "spawn: " & e.msg, exception)
+        return nil
+      var resolveFn, rejectFn: JSObjectRef
+      var mkEx: JSValueRef = nil
+      let promise = JSObjectMakeDeferredPromise(ctx, addr resolveFn,
+        addr rejectFn, addr mkEx)
+      if promise == nil or mkEx != nil:
+        try:
+          close(p)
+        except CatchableError:
+          discard
+        throwError(ctx, "spawn: could not create promise", exception)
+        return nil
+      let rt = currentRt()
+      JSValueProtect(ctx, promise)
+      JSValueProtect(ctx, resolveFn)
+      JSValueProtect(ctx, rejectFn)
+      if onOut != nil:
+        JSValueProtect(ctx, onOut)
+      if onErr != nil:
+        JSValueProtect(ctx, onErr)
+      let loop = rt.ensureLoop()
+      inc rt.pending
+      let st = SpawnState(p: p, ctx: ctx, rt: rt, loop: loop,
+        onOut: onOut, onErr: onErr, resolveFn: resolveFn,
+        rejectFn: rejectFn, promise: promise)
+      st.timerId = loop.addInterval(spawnPollMs,
+        proc(id: int) = pollSpawn(st))
+      promise
