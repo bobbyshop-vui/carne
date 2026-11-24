@@ -368,3 +368,59 @@ test "db orm sync connect and terminals":
     "s.close(); " &
     "return rows.length + ':' + one.a + ':' + applied.join(','); " &
     "})()") == "1:5:1"
+
+test "db orm builder generates per-dialect placeholders":
+  check runCode(ormPre &
+    "const pg = s.table('users').where({name: 'bo', age: 17})" &
+    ".toSQL('postgres'); " &
+    "const lite = s.table('users').where({name: 'bo', age: 17})" &
+    ".toSQL('sqlite'); " &
+    "await s.close(); " &
+    "return pg.text + '|' + lite.text + '|' + pg.params.join(','); " &
+    "})()") == "SELECT * FROM \"users\" WHERE \"name\" = $1 AND " &
+    "\"age\" = $2|SELECT * FROM \"users\" WHERE \"name\" = ? AND " &
+    "\"age\" = ?|bo,17"
+
+test "db orm transactionSync commit and rollback":
+  check runCode("(() => { " &
+    "const db = require('std/db'); " &
+    "const s = db.connectSync('sqlite::memory:'); " &
+    "s.execSync('CREATE TABLE t (a TEXT)'); " &
+    "s.transactionSync((tx) => { " &
+    "tx.table('t').insert({a: 'kept'}).runSync(); }); " &
+    "try { s.transactionSync((tx) => { " &
+    "tx.table('t').insert({a: 'lost'}).runSync(); " &
+    "throw new Error('boom'); }); } catch (e) {} " &
+    "const r = s.table('t').allSync(); " &
+    "s.close(); " &
+    "return r.length + ':' + r[0].a; " &
+    "})()") == "1:kept"
+
+test "db orm nested transactionSync uses savepoints":
+  check runCode("(() => { " &
+    "const db = require('std/db'); " &
+    "const s = db.connectSync('sqlite::memory:'); " &
+    "s.execSync('CREATE TABLE t (a TEXT)'); " &
+    "s.transactionSync((tx) => { " &
+    "tx.table('t').insert({a: 'outer'}).runSync(); " &
+    "try { tx.transactionSync((inner) => { " &
+    "inner.table('t').insert({a: 'inner'}).runSync(); " &
+    "throw new Error('inner boom'); }); } catch (e) {} }); " &
+    "const r = s.table('t').allSync(); " &
+    "s.close(); " &
+    "return r.length + ':' + r[0].a; " &
+    "})()") == "1:outer"
+
+test "db transactionSync rejects non-function":
+  expect CarneError:
+    discard runCode("(() => { " &
+      "const db = require('std/db'); " &
+      "const s = db.connectSync('sqlite::memory:'); " &
+      "s.transactionSync(42); })()")
+
+test "db driver postgres unreachable throws":
+  expect CarneError:
+    discard runCode(
+      "require('std/db/driver').connectSync({dialect: 'postgres', " &
+      "host: '127.0.0.1', port: 1, database: 'carne_test', " &
+      "connectTimeout: 2})")

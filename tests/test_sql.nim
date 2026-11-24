@@ -71,3 +71,28 @@ test "sql format normalizes":
     "require('std/sql').sqlite.format('select a from t')") ==
     runCode("require('std/sql').sqlite.stringify(require('std/sql')" &
     ".sqlite.parse('select a from t'))")
+
+test "sql format upperCase option":
+  check runCode(
+    "require('std/sql').sqlite.format('select a from t', " &
+    "{upperCase: true})") == "SELECT a FROM t;"
+  check runCode(
+    "require('std/sql').postgres.format('select $1', " &
+    "{upperCase: true})") == "SELECT $1;"
+  check runCode(
+    "require('std/sql').sqlite.format('select a from t', " &
+    "{upperCase: false})") ==
+    runCode("require('std/sql').sqlite.format('select a from t')")
+
+test "sql format rejects non-boolean upperCase":
+  expect CarneError:
+    discard runCode(
+      "require('std/sql').sqlite.format('select a from t', " &
+      "{upperCase: 42})")
+  expect CarneError:
+    discard runCode(
+      "require('std/sql').postgres.format('select 1', " &
+      "{upperCase: 'yes'})")
+  expect CarneError:
+    discard runCode(
+      "require('std/sql').mysql.format('select 1', {upperCase: 1})")

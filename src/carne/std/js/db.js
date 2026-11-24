@@ -14,9 +14,10 @@
 // for postgres); values bind separately and are never interpolated.
 // Identifiers are double-quoted per dialect. Every statement is
 // validated by the driver's std/sql grammars before it executes.
-// Terminals are async (all/first/run); Sync twins (allSync/firstSync/
-// runSync) and the raw handle (db.raw) cover blocking scripts and
-// boot-time migrations. Models are async-only in v1.
+// Terminals are async (all/first/run/transaction); Sync twins
+// (allSync/firstSync/runSync/transactionSync) and the raw handle
+// (db.raw) cover blocking scripts and boot-time migrations. Models
+// are async-only in v1.
 "use strict";
 /*
  * @typedef {object} ColumnDef - Model column definition.
@@ -752,6 +753,59 @@ Database.prototype.transaction = function (fn) {
       throw err;
     });
   });
+};
+
+/*
+ * Blocking transaction over execSync (nested calls use savepoints).
+ * @param {Function} fn - Function receiving the tx Database.
+ * @returns {any} fn's return value.
+ */
+Database.prototype.transactionSync = function (fn) {
+  if (typeof fn !== "function") {
+    throw new Error("db.transactionSync: type mismatch parameter:" +
+      " `fn`. Got `" + jsKind(fn) + "`, expected `function`");
+  }
+  var self = this;
+  var nested = self.txDepth > 0;
+  var sp = "carne_sp_" + self.txDepth;
+  self.txDepth++;
+  if (nested) {
+    self.execSync("SAVEPOINT " + sp);
+  } else {
+    self.execSync("BEGIN");
+  }
+  var out;
+  try {
+    out = fn(self);
+  } catch (err) {
+    if (nested) {
+      try {
+        self.execSync("ROLLBACK TO SAVEPOINT " + sp);
+      } catch (rollbackErr) {
+        /* original error wins */
+      }
+      try {
+        self.execSync("RELEASE SAVEPOINT " + sp);
+      } catch (releaseErr) {
+        /* original error wins */
+      }
+    } else {
+      try {
+        self.execSync("ROLLBACK");
+      } catch (rollbackErr) {
+        /* original error wins */
+      }
+    }
+    self.txDepth--;
+    throw err;
+  }
+  if (nested) {
+    self.execSync("RELEASE SAVEPOINT " + sp);
+  } else {
+    self.execSync("COMMIT");
+  }
+  self.txDepth--;
+  return out;
 };
 
 /*

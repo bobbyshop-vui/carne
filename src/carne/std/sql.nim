@@ -8,7 +8,7 @@
 #   sql.postgres.validate("SELECT $1")    -> {valid: true}
 #   sql.mysql.validate("SELECT `a` FROM t") -> {valid: true}
 #
-# One sub-namespace per dialect: sqlite, postgres (= pgsql), mysql.
+# One sub-namespace per dialect: sqlite, postgres, mysql.
 # Each has parse(sql) -> AST, stringify(ast) -> SQL, format(sql) -> SQL
 # and validate(sql) -> {valid, error?}.
 # parse throws a JS Error on syntax errors; validate never throws,
@@ -224,6 +224,30 @@ proc doFormat(ctx: JSContextRef; text: string; upper: bool;
     sqlErr(ctx, docBlock, name, e.msg, exception)
     nil
 
+proc readUpperOpt(ctx: JSContextRef; optsObj: JSValueRef; name: string;
+    docBlock: string; exception: ptr JSValueRef;
+    upper: var bool): bool =
+  ## Reads the optional {upperCase} flag. Missing/null stays false;
+  ## any other non-boolean throws instead of being silently ignored.
+  if optsObj == nil:
+    return true
+  var err = ""
+  let u = getField(ctx, optsObj, "upperCase", err)
+  if err != "":
+    sqlErr(ctx, docBlock, name, "options.upperCase " & err, exception)
+    return false
+  case u.kind
+  of nvkBool:
+    upper = u.b
+  of nvkUndefined, nvkNull:
+    discard
+  else:
+    sqlErr(ctx, docBlock, name,
+      "options.upperCase must be a boolean, got " & jsTypeName(u.kind),
+      exception)
+    return false
+  true
+
 ## Builds the std/sql namespace object.
 init proc(module: Module) =
   let sqliteNs = newObject(module.ctx)
@@ -242,15 +266,9 @@ init proc(module: Module) =
   ctx.registerFn sqliteFormat(sql: string, optsObj ?: JSObjectRef):
     ## sqlite.format(sql[, {upperCase}]) -> string (normalized)
     var upper = false
-    if optsObj != nil:
-      var err = ""
-      let u = getField(ctx, optsObj, "upperCase", err)
-      if err != "":
-        sqlErr(ctx, docBlock, "sqlite.format",
-          "options.upperCase " & err, exception)
-        return nil
-      if u.kind == nvkBool:
-        upper = u.b
+    if not readUpperOpt(ctx, optsObj, "sqlite.format", docBlock,
+        exception, upper):
+      return nil
     return doFormat(ctx, sql, upper, sqlite, "sqlite.format", docBlock,
       exception)
 
@@ -270,15 +288,9 @@ init proc(module: Module) =
   ctx.registerFn postgresFormat(sql: string, optsObj ?: JSObjectRef):
     ## postgres.format(sql[, {upperCase}]) -> string (normalized)
     var upper = false
-    if optsObj != nil:
-      var err = ""
-      let u = getField(ctx, optsObj, "upperCase", err)
-      if err != "":
-        sqlErr(ctx, docBlock, "postgres.format",
-          "options.upperCase " & err, exception)
-        return nil
-      if u.kind == nvkBool:
-        upper = u.b
+    if not readUpperOpt(ctx, optsObj, "postgres.format", docBlock,
+        exception, upper):
+      return nil
     return doFormat(ctx, sql, upper, pgsql, "postgres.format", docBlock,
       exception)
 
@@ -298,15 +310,9 @@ init proc(module: Module) =
   ctx.registerFn mysqlFormat(sql: string, optsObj ?: JSObjectRef):
     ## mysql.format(sql[, {upperCase}]) -> string (normalized)
     var upper = false
-    if optsObj != nil:
-      var err = ""
-      let u = getField(ctx, optsObj, "upperCase", err)
-      if err != "":
-        sqlErr(ctx, docBlock, "mysql.format",
-          "options.upperCase " & err, exception)
-        return nil
-      if u.kind == nvkBool:
-        upper = u.b
+    if not readUpperOpt(ctx, optsObj, "mysql.format", docBlock,
+        exception, upper):
+      return nil
     return doFormat(ctx, sql, upper, mysql, "mysql.format", docBlock,
       exception)
 
