@@ -55,6 +55,22 @@ test "isKnownJs covers the fallback list":
   check isKnownJs("test")
   check not isKnownJs("nope", getTempDir() / "carne_stdsync_nobody")
 
+test "isKnownJs honors the local manifest":
+  let (base, home) = fakeRepo()
+  discard stdSync(home, base)
+  check isKnownJs("a", home)
+  check not isKnownJs("nope", home)
+
+test "committed manifest matches committed js files":
+  let jsDir = currentSourcePath.parentDir() / ".." / "src" / "carne" /
+    "std" / "js"
+  let m = parseStdManifest(readFile(jsDir / "manifest.json"))
+  check m.files.len == stdKnownJs.len
+  for name in stdKnownJs:
+    check m.files.hasKey(name)
+  for name, entry in m.files.pairs:
+    check verifySha(readFile(jsDir / entry.file), entry.sha256)
+
 test "stdSync downloads and verifies from a registry":
   let (base, home) = fakeRepo()
   let r = stdSync(home, base)
@@ -85,6 +101,15 @@ test "stdSync repairs missing files":
   check r.count == 1
   check not r.upToDate
   check fileExists(stdJsStore(home) / "a.js")
+
+test "stdSync repairs changed files":
+  let (base, home) = fakeRepo()
+  discard stdSync(home, base)
+  writeFile(stdJsStore(home) / "a.js", "tampered\n")
+  let r = stdSync(home, base)
+  check r.count == 1
+  check not r.upToDate
+  check readFile(stdJsStore(home) / "a.js").contains("hello")
 
 test "stdSync rejects checksum mismatches":
   let (base, home) = fakeRepo()

@@ -32,7 +32,7 @@ Tasks:
 - [x] Docs correction: update README std list for html, vcard, feed now that serialize exists. Add verified round-trip examples.
 - [x] `std/sql`: harden dialect parity and error messages, keep validate behavior stable.
 - [x] `std/db`: sqlite + postgres driver gaps, sync vs async parity, placeholder rules (`?` vs `$N`), lazy libpq load, JS ORM builder and migration coverage (`src/carne/std/db.nim:1`).
-- [ ] JS shims (`std/js/*`): keep manifest versioning and `stdsync` refresh path tested.
+- [x] JS shims (`std/js/*`): keep manifest versioning and `stdsync` refresh path tested.
 
 Verify: `clue test test_html test_vcard test_feed test_path test_csv test_sql test_mimetype test_db`, round-trip tests for every parse and stringify pair.
 
