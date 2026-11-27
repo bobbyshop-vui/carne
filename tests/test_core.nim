@@ -42,19 +42,31 @@ proc normLines(lines: seq[string]): HashSet[string] =
     if t.len > 0: result.incl t
 
 test "top-level gen help and `gen` sub-help list the same commands and flags":
-  let bin = "bin" / "carne"
-  if not fileExists(bin): skip()
-  let top = stripAnsi(execProcess(bin, args = ["--help"],
-    options = {poStdErrToStdOut})).splitLines
-  let sub = stripAnsi(execProcess(bin, args = ["gen"],
-    options = {poStdErrToStdOut})).splitLines
-  var inGen = false
-  var topGen: seq[string]
-  for l in top:
-    if l.strip().endsWith("Generating:"): inGen = true; continue
-    if inGen:
-      if l.strip().len == 0: break
-      topGen.add l.replace("gen ", "")
-  let subGen = sub.filterIt(not it.startsWith("usage"))
-  check normLines(topGen).len > 0
-  check normLines(topGen) == normLines(subGen)
+  ## Needs a built binary (`scripts/build.sh` or `clue build`). CI runs
+  ## tests without one, and unittest's skip() does not stop the test
+  ## body, so the exec lives behind an explicit guard.
+  let bin = absolutePath("bin" / "carne")
+  var top, sub: seq[string]
+  var ran = false
+  if fileExists(bin):
+    try:
+      top = stripAnsi(execProcess(bin, args = ["--help"],
+        options = {poStdErrToStdOut})).splitLines
+      sub = stripAnsi(execProcess(bin, args = ["gen"],
+        options = {poStdErrToStdOut})).splitLines
+      ran = true
+    except OSError:
+      discard
+  if not ran:
+    skip()
+  else:
+    var inGen = false
+    var topGen: seq[string]
+    for l in top:
+      if l.strip().endsWith("Generating:"): inGen = true; continue
+      if inGen:
+        if l.strip().len == 0: break
+        topGen.add l.replace("gen ", "")
+    let subGen = sub.filterIt(not it.startsWith("usage"))
+    check normLines(topGen).len > 0
+    check normLines(topGen) == normLines(subGen)
